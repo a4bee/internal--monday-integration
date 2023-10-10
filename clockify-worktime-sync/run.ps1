@@ -13,8 +13,9 @@ foreach ($task in $mondayTasks) {
     Write-Verbose "Calculating time for $taskName ..."
 
     $id = $task | Select-Object -ExpandProperty $env:COLUMN_ID
+    $idTitle = "$id $taskName" -replace ' ', '_'
 
-    $clockifyTask = ($allClockifyTasks | Where-Object { $_.name -eq "$id $taskName" })
+    $clockifyTask = ($allClockifyTasks | Where-Object { $_.name -eq "$idTitle" })
 
     $duration = $clockifyTask | Select-Object -ExpandProperty "duration"
     $floatDuration = 0.0

@@ -24,7 +24,7 @@ $itemName = $Request.Body.Event.pulseName
 
 $currentMondayItem = Get-A4MondayItem -BoardID $boardId -GetColumnID | Where-Object { $_.id -eq $itemId } 
 $taskId = $currentMondayItem | Select-Object -ExpandProperty $env:COLUMN_ID
-$taskName = "$taskId $itemName"
+$taskName = "$taskId $itemName" -replace " ", "_"
 
 $currentAssigneesFromMonday = @()
 $currentMondayItem.PSObject.Properties | ForEach-Object { 
@@ -37,6 +37,5 @@ $currentMondayItem.PSObject.Properties | ForEach-Object {
     }
   }
 }
-
 $nextAssignees = ($currentAssigneesFromMonday | Select-Object -Unique)
 Update-ClockifyAsignees -WorkspaceId $env:CLOCKIFY_WORKSPACE_ID -ProjectId $env:CLOCKIFY_PROJECT_ID -TaskName $taskName -Assignees $nextAssignees 

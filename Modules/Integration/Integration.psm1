@@ -108,7 +108,7 @@ function Get-ClockifyTasks {
     $headers = New-Object "System.Collections.Generic.Dictionary[[String],[String]]"
     $headers.Add("x-api-key", $clockifyApiToken)
 
-    $response = Invoke-RestMethod 'https://api.clockify.me/api/v1/workspaces/5fa1278767cee745ea7711db/projects/62c43d8dd9786d0bf7dd0e44/tasks?page-size=0' -Method 'GET' -Headers $headers
+    $response = Invoke-RestMethod "https://api.clockify.me/api/v1/workspaces/$WorkspaceId/projects/$ProjectId/tasks?page-size=0" -Method 'GET' -Headers $headers
     $response 
 }
 

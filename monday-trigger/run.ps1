@@ -29,7 +29,7 @@ $nextId = ($allIds | Measure-Object -Maximum).Maximum + 1
 
 
 #Create next ID for created item
-$idTitle = "$nextId" + " " + "$itemName"
+$idTitle = "$nextId $itemName" -replace ' ', '_'
 Set-A4MondayTextColumnValue -ItemID $itemId -BoardID $boardId -ColumnID "$editedColumnId" -Value $nextId
 
 #Create new Clockify task with previously generated unique ID
