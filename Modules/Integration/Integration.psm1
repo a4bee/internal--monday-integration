@@ -1,6 +1,33 @@
 using namespace System.Collections.Generic
 using namespace System.Linq
 
+$A4beeBubblesMapping = @{
+    "Board"              = "A4BEEBoard"
+    "Communication & PR" = "A4BEEBoard"
+    "Consulting"         = "A4BEEConsulting"
+    "SW Engineering"     = "A4BEESWENGINEERING"
+    "IS Engineering"     = "A4BEEISE"
+    "Finance"            = "A4BEEFinance"
+    "Digital Lab"        = "A4BEELab"
+    "Operations"         = "A4BEEOperations"
+    "People & Culture"   = "A4BEEPeople&Culture"
+    "Revenue & Growth"   = "A4BEERevenueGrowth"
+}
+
+function Get-A4beeBubblesMapping {
+    param (
+        [Parameter(Mandatory = $true)] 
+        [string]$BubbleName
+    )
+
+    $ClockifyBubbleName = $null
+    if ( $A4beeBubblesMapping.ContainsKey($BubbleName) ) {
+        $ClockifyBubbleName = $A4beeBubblesMapping[$BubbleName]
+    }
+
+    return $ClockifyBubbleName
+}
+
 function Send-Response {
     param (
         [Parameter(Mandatory = $true)] 
@@ -76,6 +103,50 @@ function Get-ClockifyUserByEmail {
     $response = Invoke-RestMethod "https://api.clockify.me/api/v1/workspaces/$WorkspaceId/users?email=$UserEmail" -Method 'GET' -Headers $headers
 
     return $response
+}
+
+function Get-ClockifyClientIdByName {
+    param (
+        [Parameter(Mandatory = $true)] 
+        [string]$WorkspaceId,
+        [Parameter(Mandatory = $true)] 
+        [string]$ClientName
+    )
+
+    $clockifyApiToken = Get-ClockifyApiToken
+    $headers = New-Object "System.Collections.Generic.Dictionary[[String],[String]]"
+    $headers.Add("x-api-key", $clockifyApiToken)
+    $headers.Add("Content-Type", "application/json")
+    $strictNameSearch = $true
+
+    $response = Invoke-RestMethod "https://api.clockify.me/api/v1/workspaces/$WorkspaceId/clients?name=$ClientName&strict-name-search=$strictNameSearch" -Method 'GET' -Headers $headers
+
+    $clientId = ($response ?? [PSCustomObject]@{}).id
+
+    return $clientId
+}
+
+function Get-ClockifyProjectIdByName {
+    param (
+        [Parameter(Mandatory = $true)] 
+        [string]$WorkspaceId,
+        [Parameter(Mandatory = $true)]
+        [string]$ClientId,
+        [Parameter(Mandatory = $true)]
+        [string]$ProjectName
+    )
+    
+    $clockifyApiToken = Get-ClockifyApiToken
+    $headers = New-Object "System.Collections.Generic.Dictionary[[String],[String]]"
+    $headers.Add("x-api-key", $clockifyApiToken)
+    $headers.Add("Content-Type", "application/json")
+    $strictNameSearch = $true
+    
+    $response = Invoke-RestMethod "https://api.clockify.me/api/v1/workspaces/$WorkspaceId/projects?clients=$ClientId&name=$ProjectName&strict-name-search=$strictNameSearch" -Method 'GET' -Headers $headers 
+
+    $projectId = ($response ?? [PSCustomObject]@{}).id
+
+    return $projectId
 }
 
 function Get-ClockifyTaskByName {

@@ -20,18 +20,14 @@ $groupId = $Request.Body.Event.groupId
 $itemId = $Request.Body.Event.pulseId
 $editedColumnId = $env:COLUMN_ID
 $itemName = $Request.Body.Event.pulseName
+$sponsoringBubbleName = $Request.Body.Event.value.label.text
 
-Set-MondayApiToken
+$sponsoringBubbleNameClkTag = Get-A4beeBubblesMapping -BubbleName $sponsoringBubbleName
+Write-Verbose "Sponsoring bubble name clockify tag: $sponsoringBubbleNameClkTag"
 
-$tasks = Get-A4MondayItem -BoardID $boardId -GroupID $groupId -GetColumnID
-$allIds = $tasks | Select-Object -ExpandProperty $env:COLUMN_ID
-$nextId = ($allIds | Measure-Object -Maximum).Maximum + 1
-
-
-#Create next ID for created item
-$idTitle = "$nextId $itemName" -replace ' ', '_'
-Set-A4MondayTextColumnValue -ItemID $itemId -BoardID $boardId -ColumnID "$editedColumnId" -Value $nextId
+$clientId = Get-ClockifyClientIdByName -WorkspaceId $env:CLOCKIFY_WORKSPACE_ID -ClientName $sponsoringBubbleNameClkTag
+$projectId = Get-ClockifyProjectIdByName -WorkspaceId $env:CLOCKIFY_WORKSPACE_ID -ClientId $clientId -ProjectName $env:PROJECT_NAME
 
 #Create new Clockify task with previously generated unique ID
-Add-ClockifyTask -WorkspaceId $env:CLOCKIFY_WORKSPACE_ID -ProjectId $env:CLOCKIFY_PROJECT_ID -TaskName $idTitle
+Add-ClockifyTask -WorkspaceId $env:CLOCKIFY_WORKSPACE_ID -ProjectId $projectId -TaskName $itemName
 
