@@ -29,6 +29,6 @@ $projectId = Get-ClockifyProjectIdByBubbleName -WorkspaceId $env:CLOCKIFY_WORKSP
 Add-ClockifyTask -WorkspaceId $env:CLOCKIFY_WORKSPACE_ID -ProjectId $projectId -TaskName $itemName
 if ($previousSponsoringBubbleName) {
   $previousProjectId = Get-ClockifyProjectIdByBubbleName -WorkspaceId $env:CLOCKIFY_WORKSPACE_ID -ProjectName $env:PROJECT_NAME -MondayBubbleName $previousSponsoringBubbleName
-  # Remove-ClockifyTask -WorkspaceId $env:CLOCKIFY_WORKSPACE_ID -ProjectId $previousProjectId -TaskName $itemName
+  Remove-ClockifyTask -WorkspaceId $env:CLOCKIFY_WORKSPACE_ID -ProjectId $previousProjectId -TaskName $itemName
 }
 
