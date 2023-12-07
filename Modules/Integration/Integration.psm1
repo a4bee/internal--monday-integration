@@ -88,6 +88,33 @@ function Add-ClockifyTask {
     Write-Verbose $response
 }
 
+function Remove-ClockifyTask {
+    param (
+        [Parameter(Mandatory = $true)] 
+        [string]$WorkspaceId,
+        [Parameter(Mandatory = $true)] 
+        [string]$ProjectId,
+        [Parameter(Mandatory = $true)] 
+        [string]$TaskName
+    )
+
+    $clockifyApiToken = Get-ClockifyApiToken
+    $headers = New-Object "System.Collections.Generic.Dictionary[[String],[String]]"
+    $headers.Add("x-api-key", $clockifyApiToken)
+    $headers.Add("Content-Type", "application/json")
+
+    $taskId = Get-ClockifyTaskByName -WorkspaceId $WorkspaceId -ProjectId $ProjectId -TaskName $TaskName | Select-Object -ExpandProperty "id"
+
+    If ($taskId) {
+        $response = Invoke-RestMethod "https://api.clockify.me/api/v1/workspaces/$WorkspaceId/projects/$ProjectId/tasks/$taskId" -Method 'DELETE' -Headers $headers
+        $response | ConvertTo-Json
+        Write-Verbose $response
+    }
+    Else {
+        Write-Verbose "Task delete ERROR: Couldn't find task $TaskName"
+    }
+}
+
 function Get-ClockifyUserByEmail {
     param (
         [Parameter(Mandatory = $true)] 
@@ -119,7 +146,9 @@ function Get-ClockifyClientIdByName {
     $headers.Add("Content-Type", "application/json")
     $strictNameSearch = $true
 
-    $response = Invoke-RestMethod "https://api.clockify.me/api/v1/workspaces/$WorkspaceId/clients?name=$ClientName&strict-name-search=$strictNameSearch" -Method 'GET' -Headers $headers
+    $sanitizedClientName = [System.Uri]::EscapeDataString($ClientName)
+
+    $response = Invoke-RestMethod "https://api.clockify.me/api/v1/workspaces/$WorkspaceId/clients?name=$sanitizedClientName&strict-name-search=$strictNameSearch" -Method 'GET' -Headers $headers
 
     $clientId = ($response ?? [PSCustomObject]@{}).id
 
@@ -141,11 +170,31 @@ function Get-ClockifyProjectIdByName {
     $headers.Add("x-api-key", $clockifyApiToken)
     $headers.Add("Content-Type", "application/json")
     $strictNameSearch = $true
+
+    $sanitizedProjectName = [System.Uri]::EscapeDataString($ProjectName)
     
-    $response = Invoke-RestMethod "https://api.clockify.me/api/v1/workspaces/$WorkspaceId/projects?clients=$ClientId&name=$ProjectName&strict-name-search=$strictNameSearch" -Method 'GET' -Headers $headers 
+    $response = Invoke-RestMethod "https://api.clockify.me/api/v1/workspaces/$WorkspaceId/projects?clients=$ClientId&name=$sanitizedProjectName&strict-name-search=$strictNameSearch" -Method 'GET' -Headers $headers 
 
     $projectId = ($response ?? [PSCustomObject]@{}).id
 
+    return $projectId
+}
+
+function Get-ClockifyProjectIdByBubbleName {
+    param (
+        [Parameter(Mandatory = $true)] 
+        [string]$WorkspaceId,
+        [Parameter(Mandatory = $true)] 
+        [string]$ProjectName,
+        [Parameter(Mandatory = $true)]
+        [string]$MondayBubbleName
+    )
+
+    $sponsoringBubbleNameClkTag = Get-A4beeBubblesMapping -BubbleName $MondayBubbleName
+    Write-Verbose "Sponsoring bubble name clockify tag: $sponsoringBubbleNameClkTag"
+
+    $clientId = Get-ClockifyClientIdByName -WorkspaceId $WorkspaceId -ClientName $sponsoringBubbleNameClkTag
+    $projectId = Get-ClockifyProjectIdByName -WorkspaceId $WorkspaceId -ClientId $clientId -ProjectName $ProjectName
     return $projectId
 }
 
@@ -162,8 +211,9 @@ function Get-ClockifyTaskByName {
     $headers = New-Object "System.Collections.Generic.Dictionary[[String],[String]]"
     $headers.Add("x-api-key", $clockifyApiToken)
     $strictNameSearch = $true
+    $sanitizedTaskName = [System.Uri]::EscapeDataString($TaskName)
 
-    $response = Invoke-RestMethod "https://api.clockify.me/api/v1/workspaces/$WorkspaceId/projects/$ProjectId/tasks?name=$TaskName&strict-name-search=$strictNameSearch" -Method 'GET' -Headers $headers
+    $response = Invoke-RestMethod "https://api.clockify.me/api/v1/workspaces/$WorkspaceId/projects/$ProjectId/tasks?name=$sanitizedTaskName&strict-name-search=$strictNameSearch" -Method 'GET' -Headers $headers
 
     return $response
 }

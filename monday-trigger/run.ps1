@@ -21,13 +21,14 @@ $itemId = $Request.Body.Event.pulseId
 $editedColumnId = $env:COLUMN_ID
 $itemName = $Request.Body.Event.pulseName
 $sponsoringBubbleName = $Request.Body.Event.value.label.text
+$previousSponsoringBubbleName = $Request.Body.Event.previousValue.label.text
 
-$sponsoringBubbleNameClkTag = Get-A4beeBubblesMapping -BubbleName $sponsoringBubbleName
-Write-Verbose "Sponsoring bubble name clockify tag: $sponsoringBubbleNameClkTag"
-
-$clientId = Get-ClockifyClientIdByName -WorkspaceId $env:CLOCKIFY_WORKSPACE_ID -ClientName $sponsoringBubbleNameClkTag
-$projectId = Get-ClockifyProjectIdByName -WorkspaceId $env:CLOCKIFY_WORKSPACE_ID -ClientId $clientId -ProjectName $env:PROJECT_NAME
+$projectId = Get-ClockifyProjectIdByBubbleName -WorkspaceId $env:CLOCKIFY_WORKSPACE_ID -ProjectName $env:PROJECT_NAME -MondayBubbleName $sponsoringBubbleName
 
 #Create new Clockify task with previously generated unique ID
 Add-ClockifyTask -WorkspaceId $env:CLOCKIFY_WORKSPACE_ID -ProjectId $projectId -TaskName $itemName
+if ($previousSponsoringBubbleName) {
+  $previousProjectId = Get-ClockifyProjectIdByBubbleName -WorkspaceId $env:CLOCKIFY_WORKSPACE_ID -ProjectName $env:PROJECT_NAME -MondayBubbleName $previousSponsoringBubbleName
+  # Remove-ClockifyTask -WorkspaceId $env:CLOCKIFY_WORKSPACE_ID -ProjectId $previousProjectId -TaskName $itemName
+}
 
