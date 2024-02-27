@@ -23,7 +23,7 @@ $itemName = $Request.Body.Event.pulseName
 
 Set-MondayApiToken
 
-$tasks = Get-A4MondayItem -BoardID $boardId -GroupID $groupId -GetColumnID
+$tasks = Get-A4MondayItem -BoardID $boardId -GetColumnID
 $allIds = $tasks | Select-Object -ExpandProperty $env:COLUMN_ID
 $nextId = ($allIds | Measure-Object -Maximum).Maximum + 1
 

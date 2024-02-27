@@ -50,8 +50,17 @@ function Get-A4MondayHeader {
       Throw 'You have to set an ApiToken. Use the Set-A4MondayApiToken function.'
     }
   }
+  if (-not $Script:MondayApiVersion) {
+    New-Variable -Name APIversion -Value "2024-01" -Scope Script -Force -Option ReadOnly #Setting 2024-01 API version as default
+  }
+  else {
+    New-Variable -Name APIversion -Value $Script:MondayApiVersion -Scope Script -Force -Option ReadOnly #Can be overwritten with $Script:MondayApiVersion
+  }
       
-  return @{Authorization = (New-Object pscredential -ArgumentList 'dump', $A4MondayApiToken).GetNetworkCredential().Password }
+  return @{
+    Authorization = (New-Object pscredential -ArgumentList 'dump', $A4MondayApiToken).GetNetworkCredential().Password
+    'API-Version' = ($APIversion)
+  }
 }
 
 Function Move-A4MondayItemToGroup {
@@ -76,10 +85,22 @@ Function Set-A4MondayTextColumnValue {
     [parameter(Mandatory)]  $ItemID,
     [parameter(Mandatory)]  $BoardID,
     [parameter(Mandatory)]  $ColumnID,
-    [parameter(Mandatory)]  $Value
+    [parameter(Mandatory)]  $Value,
+    [switch]                $create_labels_if_missing #create new status if not present
+    
   )
-
-  $query = @"
+  if ($create_labels_if_missing) {
+    $query = @"
+  mutation{
+    change_simple_column_value(item_id:$ItemID, board_id:$BoardID, column_id: "$ColumnID", value:"$Value", create_labels_if_missing: true)
+      {
+        name
+      }
+    }
+"@
+  }
+  else {
+    $query = @"
   mutation{
     change_simple_column_value(item_id:$ItemID, board_id:$BoardID, column_id: "$ColumnID", value:"$Value")
       {
@@ -87,7 +108,7 @@ Function Set-A4MondayTextColumnValue {
       }
     }
 "@
-  
+  } 
   Return(Invoke-A4MondayQuery -Query $Query )
 }
 
@@ -216,7 +237,7 @@ Function Get-A4MondayValueOfColumn {
   }
   #write-host $column_value.type -ForegroundColor Green
 
-  $Value = switch ($column_value.type) {
+  $Value = switch ($column_value.column.type) {
     'boolean' {
       if (($column_value.value | ConvertFrom-Json).checked -eq 'true') {
         $true
@@ -231,6 +252,12 @@ Function Get-A4MondayValueOfColumn {
       $PersonObj | Add-Member -MemberType NoteProperty -Name ID -Value (($column_value.value | ConvertFrom-Json).personsAndTeams.id)
       $PersonObj
     }
+    'people' {
+      $PersonObj = New-Object psobject
+      $PersonObj | Add-Member -MemberType NoteProperty -Name 'Text' -Value ($column_value.text)
+      $PersonObj | Add-Member -MemberType NoteProperty -Name ID -Value (($column_value.value | ConvertFrom-Json).personsAndTeams.id)
+      $PersonObj
+    }
     'date' {
       if ($column_value.text -eq '') {
         $null
@@ -239,7 +266,18 @@ Function Get-A4MondayValueOfColumn {
         [datetime]($column_value.text)
       }
     }
-
+    'last_updated' {
+      $Updater = New-Object psobject
+      $Updater | Add-Member -MemberType NoteProperty -Name 'Updated_at' ($column_value.text)
+      $Updater | Add-Member -MemberType NoteProperty -Name UpdaterID (($column_value.value | ConvertFrom-Json).updater_id)
+      $Updater
+    }
+    'creation_log' {
+      $Creator = New-Object psobject
+      $Creator | Add-Member -MemberType NoteProperty -Name 'Created_at' ($column_value.text)
+      $Creator | Add-Member -MemberType NoteProperty -Name CreatorID (($column_value.value | ConvertFrom-Json).creator_id)
+      $Creator
+    }
     Default { $column_value.text }
   }
   Return $Value
@@ -304,7 +342,7 @@ Function New-A4MondayItem {
   ####TODO find out how to set value in columns during item creation
   $Query = @"
  mutation {
-  create_item (board_id: $BoardID, group_id: $GroupID, item_name: "$ItemName"){
+  create_item (board_id: $BoardID, group_id: "$GroupID", item_name: "$ItemName"){
       id
   }
 }
@@ -315,7 +353,6 @@ Function New-A4MondayItem {
 
 Function Get-A4MondayItem {
   #TODO: Set wchich properties we have to get for column values. 
-
   [CmdletBinding(DefaultParameterSetName = 'AllItems')]
   Param(
     [Parameter(Mandatory = $true)][long]                      $BoardID,
@@ -329,71 +366,124 @@ Function Get-A4MondayItem {
     $GroupID = Get-A4MondayGroupID -BoardID $BoardID -GroupName $GroupName
   }
 
-  if ('' -ne $GroupID) {
-    $query = @"
-    query {
-      boards (ids: $BoardID) {
-        groups(ids:$GroupID){
-          items{
-            name
-            id
-            creator{
-              id
-              email
-            }
-            column_values{
-              id
-              title
-              text
-              value
-              type
+  do {
+    if ('' -ne $GroupID) {
+      $query = @"
+        query {
+          boards(ids: $BoardID) {
+            groups(ids: "$GroupID") {
+              items_page$items_page_parameters {
+                cursor
+                items {
+                  subitems {
+                    name
+                    id
+                  }
+                  name
+                  id
+                  creator {
+                    id
+                    email
+                  }
+                  group {
+                    title
+                  }
+                  column_values {
+                    column {
+                      id
+                      title
+                      type
+                    }
+                    text
+                    value
+                  }
+                }
+              }
             }
           }
         }
-      }
-    }
 "@
-    $Items = (Invoke-A4MondayQuery -Query $query).data.boards.groups.items
-  }
-  else {  
-    $query = @"
-    query {
-      boards (ids: $BoardID) {
-          items{
-            name
-            id
-            creator{
-              id
-              email
-            }
-            column_values{
-              id
-              title
-              text
-              value
-              type
+      $Response = Invoke-A4MondayQuery -Query $query
+      $Cursor = $Response.data.boards.groups.items_page.cursor
+      if ($Cursor) {
+        $items_page_parameters = "(cursor: `"$Cursor`")"
+      }
+      $Items += $Response.data.boards.groups.items_page.items
+    }
+    else {  
+      $query = @"
+        query {
+          boards(ids: $BoardID) {
+            items_page$items_page_parameters {
+              cursor
+              items {
+                subitems {
+                  name
+                  id
+                }
+                name
+                id
+                creator {
+                  id
+                  email
+                }
+                group {
+                  title
+                }
+                column_values {
+                  column {
+                    id
+                    title
+                    type
+                  }
+                  text
+                  value
+                }
+              }
             }
           }
-      }
-    }
+        }
 "@
-    $Items = (Invoke-A4MondayQuery -Query $query).data.boards.items
-  }
+      $Response = Invoke-A4MondayQuery -Query $query
+      $Cursor = $Response.data.boards.items_page.cursor
+      if ($Cursor) {
+        $items_page_parameters = "(cursor: `"$Cursor`")"
+      }
+      $Items += $Response.data.boards.items_page.items
+    }
+  }while ($null -ne $Cursor)
 
   $outObjects = Foreach ($Item in $Items) {
+    $i = 1
     $OutObj = New-Object psobject 
     $OutObj | Add-Member -MemberType NoteProperty -Name 'id' -Value ($Item.id)
     $OutObj | Add-Member -MemberType NoteProperty -Name 'name' -Value ($Item.name)
+    $OutObj | Add-Member -MemberType NoteProperty -Name 'Group' -Value ($Item.group.title)
     $CreatorObj = New-Object psobject -Property @{'id' = $Item.Creator.id; 'email' = $Item.Creator.email }
     $OutObj | Add-Member -MemberType NoteProperty -Name 'Creator' -Value $CreatorObj
     Foreach ($column_value in $Item.column_values) {
       if ($GetColumnID) {
-        $ColumnName = $column_value.id
+        $ColumnName = $column_value.column.id
       }
       else {
-        $ColumnName = $column_value.title
+        $ColumnName = $column_value.column.title
       }
-      $OutObj | Add-Member -MemberType NoteProperty -Name $ColumnName -Value (Get-A4MondayValueOfColumn -column_value $column_value)
+      if ($ColumnName -like 'Subitems') { #Subitems have to be handled separately
+        continue
+      }
+      if ($null -eq $OutObj.$ColumnName) {
+        $OutObj | Add-Member -MemberType NoteProperty -Name $ColumnName -Value (Get-A4MondayValueOfColumn -column_value $column_value)
+      }
+      else {
+        Write-Verbose "Multiple columns of the same name $ColumnName, adding i= $i to the name to avoid errors"
+        $i++
+        $OutObj | Add-Member -MemberType NoteProperty -Name "$($ColumnName)[$($i)]" -Value (Get-A4MondayValueOfColumn -column_value $column_value)
+      }
+          
+    }
+    if ($null -ne $Item.subitems) {
+
+      $OutObj | Add-Member -MemberType NoteProperty -Name 'Subitems' -Value $Item.subitems
     }
     $OutObj
   }
@@ -403,25 +493,6 @@ Function Get-A4MondayItem {
       $outObjects | Where-Object id -In ($Group.items.id) | ForEach-Object { $_ | Add-Member -MemberType NoteProperty -Name 'Group' -Value ($Group.title) }
     }
   }
-
   Return($outObjects)  
 
-}
-
-Function Get-A4MondayUserEmailById {
-  Param(
-    [Parameter(Mandatory = $true)][string] $UserId
-  )
-  $Query = @"
-    query {
-      users (ids: $UserId) {
-        id
-        name
-        email
-      }
-    }
-"@
-
-  $UserEmail = (Invoke-A4MondayQuery -Query $Query).data.users.email
-  return $UserEmail
 }
